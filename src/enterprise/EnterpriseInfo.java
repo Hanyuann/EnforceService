@@ -20,6 +20,11 @@ import utils.Neo4jJdbcUtils;
 public class EnterpriseInfo {
 	private final int PAGE_SIZE = 10;
 
+	private static final int MODE_SUPPLY_FROM = 1;
+	private static final int MODE_SUPPLY_TO = 2;
+	private static final int MODE_FOLLOWER = 3;
+	private static final int MODE_HAS_FOLLOW = 4;
+
 	@POST
 	@Produces("application/json")
 	@Consumes("application/x-www-form-urlencoded")
@@ -56,152 +61,78 @@ public class EnterpriseInfo {
 		Statement st = null;
 		ResultSet rs = null;
 
-		switch (mode) {
-		case 1:
-			// 获取供应商
-			try {
-				StringBuffer sb = new StringBuffer("{");
-				conn = Neo4jJdbcUtils.getConnection();
-				st = conn.createStatement();
-				// 一共多少条
+		try {
+			StringBuffer sb = new StringBuffer("{");
+			conn = Neo4jJdbcUtils.getConnection();
+			st = conn.createStatement();
+
+			switch (mode) {
+			case MODE_SUPPLY_FROM:
 				rs = st.executeQuery("match (e:Enterprise)<-[r:Supply_to]-(p:Enterprise) where e.mc=\""
 						+ mc + "\" and r.status=\"NORMAL\" return count(p)");
-				if (rs.next()) {
-					sb.append("\"total\":" + rs.getString(1) + ",");
-					if (rs.getString(1).equals("0")) {
-						return "{}";
-					}
-				} else {
+				break;
+			case MODE_SUPPLY_TO:
+				rs = st.executeQuery("match (e:Enterprise)-[r:Supply_to]->(p:Enterprise) where e.mc=\""
+						+ mc + "\" and r.status=\"NORMAL\" return count(p)");
+				break;
+			case MODE_FOLLOWER:
+				rs = st.executeQuery("match (e:Enterprise)<-[r:HasFollow]-(p:Enterprise) where e.mc=\""
+						+ mc + "\" and r.status=\"NORMAL\" return count(p)");
+				break;
+			case MODE_HAS_FOLLOW:
+				rs = st.executeQuery("match (e:Enterprise)-[r:Has_follow]->(p:Enterprise) where e.mc=\""
+						+ mc + "\" and r.status=\"NORMAL\" return count(p)");
+				break;
+			}
+			
+			if (rs.next()) {
+				sb.append("\"total\":" + rs.getString(1) + ",");
+				if (rs.getString(1).equals("0")) {
 					return "{}";
 				}
-				rs.close();
+			} else {
+				return "{}";
+			}
+			rs.close();
+			
+			switch (mode) {
+			case MODE_SUPPLY_FROM:
 				rs = st.executeQuery("match (e:Enterprise)<-[r:Supply_to]-(p:Enterprise) where e.mc=\""
 						+ mc
 						+ "\" and r.status=\"NORMAL\" return p skip "
 						+ PAGE_SIZE * (page - 1) + " limit " + PAGE_SIZE);
-				sb.append("\"Enterprises\":[");
-				while (rs.next()) {
-					sb.append(rs.getString(1) + ",");
-				}
-				sb.deleteCharAt(sb.length() - 1);
-				sb.append("]}");
-				return sb.toString();
-			} catch (Exception e) {
-				e.printStackTrace();
-			} finally {
-				Neo4jJdbcUtils.release(conn, st, rs);
+				break;
+			case MODE_SUPPLY_TO:
+				rs = st.executeQuery("match (e:Enterprise)-[r:Supply_to]->(p:Enterprise) where e.mc=\""
+						+ mc
+						+ "\" and r.status=\"NORMAL\" return p skip "
+						+ PAGE_SIZE * (page - 1) + " limit " + PAGE_SIZE);
+				break;
+			case MODE_FOLLOWER:
+				rs = st.executeQuery("match (e:Enterprise)<-[r:Has_follow]-(p:Enterprise) where e.mc=\""
+						+ mc
+						+ "\" and r.status=\"NORMAL\" return p skip "
+						+ PAGE_SIZE * (page - 1) + " limit " + PAGE_SIZE);
+				break;
+			case MODE_HAS_FOLLOW:
+				rs = st.executeQuery("match (e:Enterprise)-[r:Has_follow]->(p:Enterprise) where e.mc=\""
+						+ mc
+						+ "\" and r.status=\"NORMAL\" return p skip "
+						+ PAGE_SIZE * (page - 1) + " limit " + PAGE_SIZE);
+				break;
 			}
-			break;
-		case 2:
-			//获取供应接受商
-			try {
-				StringBuffer sb = new StringBuffer("{");
-				conn = Neo4jJdbcUtils.getConnection();
-				st = conn.createStatement();
-				rs = st.executeQuery("match (e:Enterprise)-[r:Supply_to]->(p:Enterprise) "
-						+ "where e.mc=\"" + mc + "\" and r.status=\"NORMAL\" "
-						+ "return count(p)");
-				if (rs.next()) {
-					sb.append("\"total\":" + rs.getString(1) + ",");
-					if (rs.getString(1).equals("0")) {
-						return "{}";
-					}
-				} else {
-					return "{}";
-				}
-				rs.close();
-				rs = st.executeQuery("match (e:Enterprise)-[r:Supply_to]->(p:Enterprise) "
-						+ "where e.mc=\"" + mc + "\" and r.status=\"NORMAL\" "
-						+ "return p "
-						+ "skip " + PAGE_SIZE * (page-1) + " "
-						+ "limit " + PAGE_SIZE);
-				sb.append("\"Enterprises\":[");
-				while (rs.next()) {
-					sb.append(rs.getString(1) + ",");
-				}
-				sb.deleteCharAt(sb.length() - 1);
-				sb.append("]}");
-				return sb.toString();
-			} catch (Exception e) {
-				e.printStackTrace();
-			} finally {
-				Neo4jJdbcUtils.release(conn, st, rs);
-			}			
-			break;
 			
-		case 3:
-			// 获取 follow_from 关系
-			try {
-				StringBuffer sb = new StringBuffer("{");
-				conn = Neo4jJdbcUtils.getConnection();
-				st = conn.createStatement();
-				rs = st.executeQuery("match (e:Enterprise)<-[r:HasFollow]-(p:Enterprise) "
-						+ "where e.mc=\"" + mc + "\" and r.status=\"NORMAL\" "
-						+ "return count(p)");
-				if (rs.next()) {
-					sb.append("\"total\":" + rs.getString(1) + ",");
-					if (rs.getString(1).equals("0")) {
-						return "{}";
-					}
-				} else {
-					return "{}";
-				}
-				rs.close();
-				rs = st.executeQuery("match (e:Enterprise)<-[r:Has_follow]-(p:Enterprise) "
-						+ "where e.mc=\"" + mc + "\" and r.status=\"NORMAL\" "
-						+ "return p "
-						+ "skip " + PAGE_SIZE * (page-1) + " "
-						+ "limit " + PAGE_SIZE);
-				sb.append("\"Enterprises\":[");
-				while (rs.next()) {
-					sb.append(rs.getString(1) + ",");
-				}
-				sb.deleteCharAt(sb.length() - 1);
-				sb.append("]}");
-				return sb.toString();
-			} catch (Exception e) {
-				e.printStackTrace();
-			} finally {
-				Neo4jJdbcUtils.release(conn, st, rs);
-			}						
-			break;
-			
-		case 4:
-			// 获取 follow_to 关系
-			try {
-				StringBuffer sb = new StringBuffer("{");
-				conn = Neo4jJdbcUtils.getConnection();
-				st = conn.createStatement();
-				rs = st.executeQuery("match (e:Enterprise)-[r:Has_follow]->(p:Enterprise) "
-						+ "where e.mc=\"" + mc + "\" and r.status=\"NORMAL\" "
-						+ "return count(p)");
-				if (rs.next()) {
-					sb.append("\"total\":" + rs.getString(1) + ",");
-					if (rs.getString(1).equals("0")) {
-						return "{}";
-					}
-				} else {
-					return "{}";
-				}
-				rs.close();
-				rs = st.executeQuery("match (e:Enterprise)-[r:Has_follow]->(p:Enterprise) "
-						+ "where e.mc=\"" + mc + "\" and r.status=\"NORMAL\" "
-						+ "return p "
-						+ "skip " + PAGE_SIZE * (page-1) + " "
-						+ "limit " + PAGE_SIZE);
-				sb.append("\"Enterprises\":[");
-				while (rs.next()) {
-					sb.append(rs.getString(1) + ",");
-				}
-				sb.deleteCharAt(sb.length() - 1);
-				sb.append("]}");
-				return sb.toString();
-			} catch (Exception e) {
-				e.printStackTrace();
-			} finally {
-				Neo4jJdbcUtils.release(conn, st, rs);
-			}			
-			break;
+			sb.append("\"Enterprises\":[");
+			while (rs.next()) {
+				sb.append(rs.getString(1) + ",");
+			}
+			sb.deleteCharAt(sb.length() - 1);
+			sb.append("]}");
+			return sb.toString();
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			Neo4jJdbcUtils.release(conn, st, rs);
 		}
 		return "{}";
 	}
